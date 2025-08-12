@@ -15,6 +15,7 @@ import {
   Bot,
   User,
 } from "lucide-react";
+import Image from "next/image";
 
 interface Citation {
   page: number;
@@ -183,7 +184,14 @@ export default function PDFChatApp() {
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto p-10">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2 flex gap-2">
+            <Image
+              src="/bot.png"
+              alt="PDF Viewer"
+              className="h-8 w-8"
+              width={50}
+              height={50}
+            />
             PDF Chat Assistant
           </h1>
           <p className="text-gray-600">

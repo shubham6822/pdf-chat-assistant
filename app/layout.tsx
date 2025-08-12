@@ -12,9 +12,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PDF Chat Assistant - Frontend Demo",
-  description: "Upload and chat with PDF documents - Frontend only demo",
-  generator: "v0.dev",
+  title: "PDF Chat Assistant",
+  description: "Upload and chat with PDF documents",
+  icons: {
+    icon: "/bot.png",
+  },
 };
 
 export default function RootLayout({
