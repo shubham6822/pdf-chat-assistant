@@ -17,7 +17,8 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useDropzone } from "react-dropzone";
-import { generateChatResponse } from "@/lib/actions";
+import { generateChatResponse, generateFileContent } from "@/lib/actions";
+import { createPartFromUri } from "@google/genai";
 
 interface Citation {
   page: number;
@@ -154,18 +155,23 @@ export default function PDFChatApp() {
   useEffect(() => {
     (async () => {
       if (pdfFile) {
+        const file1 = await generateFileContent(pdfFile);
+        let fileContent;
+        if (file1.uri && file1.mimeType) {
+          fileContent = createPartFromUri(file1.uri, file1.mimeType);
+        }
         const pdfBuffer = await pdfFile.arrayBuffer();
         const request: Contents[] = [
           {
             role: "user" as const,
             parts: [
-              { text: "Summarize this document in 50 words" },
               {
-                inlineData: {
-                  mimeType: "application/pdf",
-                  data: Buffer.from(pdfBuffer).toString("base64"),
+                fileData: {
+                  fileUri: file1.uri, // From upload result
+                  mimeType: file1.mimeType, // e.g. "application/pdf"
                 },
               },
+              { text: `Summarize this document in 50 words ` },
             ],
           },
         ];
