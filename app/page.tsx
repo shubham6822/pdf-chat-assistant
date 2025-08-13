@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { GoogleGenAI } from "@google/genai";
 import {
   Upload,
   Send,
@@ -17,8 +16,8 @@ import {
   User,
 } from "lucide-react";
 import Image from "next/image";
-import { SYSTEM_PROMPT } from "@/lib/prompt";
 import { useDropzone } from "react-dropzone";
+import { generateChatResponse } from "@/lib/actions";
 
 interface Citation {
   page: number;
@@ -50,27 +49,21 @@ export default function PDFChatApp() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfViewerRef = useRef<HTMLIFrameElement>(null);
 
-  const ai = new GoogleGenAI({
-    apiKey: process.env.NEXT_PUBLIC_GOOGLE_GENERATIVE_AI_API_KEY!,
-  });
-
   async function chatLoop(chats: Contents[]) {
     console.log("Contents prepared for AI:", chats);
     try {
       setIsLoading(true);
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: chats,
-        config: {
-          systemInstruction: SYSTEM_PROMPT,
-        },
-      });
+
+      // Call server action directly
+      const result = await generateChatResponse(chats);
+
       setIsLoading(false);
-      if (response) {
+
+      if (result.success) {
         const newMessage: ChatMessage = {
           id: Date.now().toString(),
           role: "model",
-          content: response.text ?? "",
+          content: result.text,
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, newMessage]);
@@ -80,15 +73,36 @@ export default function PDFChatApp() {
             role: "model",
             parts: [
               {
-                text: response.text ?? "",
+                text: result.text,
               },
             ],
           },
         ]);
+      } else {
+        // Handle error from server action
+        const errorMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: "model",
+          content: `Sorry, I encountered an error: ${
+            result.error || "Unknown error"
+          }. Please try again.`,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMessage]);
       }
     } catch (error) {
       console.error("Error in chat loop:", error);
       setIsLoading(false);
+
+      // Show error message to user
+      const errorMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: "model",
+        content:
+          "Sorry, I encountered an error processing your request. Please try again.",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
       return;
     }
   }
