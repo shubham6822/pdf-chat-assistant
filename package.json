@@ -9,8 +9,10 @@
     "start": "next start"
   },
   "dependencies": {
+    "@ai-sdk/google": "^2.0.4",
     "@ai-sdk/openai": "latest",
     "@ai-sdk/react": "latest",
+    "@google/genai": "^1.13.0",
     "@hookform/resolvers": "^3.10.0",
     "@langchain/anthropic": "latest",
     "@langchain/aws": "latest",

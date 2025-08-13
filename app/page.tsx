@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { GoogleGenAI } from "@google/genai";
 import {
   Upload,
   Send,
@@ -39,6 +40,10 @@ export default function PDFChatApp() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfViewerRef = useRef<HTMLIFrameElement>(null);
 
+  const ai = new GoogleGenAI({
+    apiKey: process.env.NEXT_PUBLIC_GOOGLE_GENERATIVE_AI_API_KEY!,
+  });
+
   // Mock AI responses with citations
   const mockResponses = [
     "Based on the document, this appears to be a comprehensive report covering multiple topics. The main sections are outlined in [Page 1] and detailed throughout the document. Key findings can be found on [Page 3] and [Page 7].",
@@ -48,18 +53,28 @@ export default function PDFChatApp() {
     "This appears to be a well-structured document with clear sections. The executive summary on [Page 2] provides an overview, while detailed explanations begin on [Page 5].",
   ];
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = event.target.files?.[0];
+    console.log("fetching", file?.arrayBuffer());
     if (file && file.type === "application/pdf") {
       setPdfFile(file);
       const url = URL.createObjectURL(file);
       setPdfUrl(url);
-
+      const formData = new FormData();
+      formData.set("pdf", file);
+      console.log("fetching data", formData);
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: "How does AI work?",
+      });
+      console.log("test", response.text);
       // Add welcome message when PDF is uploaded
       const welcomeMessage: ChatMessage = {
         id: Date.now().toString(),
         role: "assistant",
-        content: `Hello! I can see you've uploaded "${file.name}". I'm ready to help you analyze this document. You can ask me questions about its content, request summaries, or ask for specific information. I'll provide citations with page numbers when referencing the document.`,
+        content: response.text ?? "",
         timestamp: new Date(),
       };
       setMessages([welcomeMessage]);
