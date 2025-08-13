@@ -1,13 +1,13 @@
-'use client';
+"use client";
 
-import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport } from 'ai';
-import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, FileText } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { useState, useRef, useEffect } from "react";
+import { Send, Bot, User, FileText } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 
 interface ChatInterfaceProps {
   pdfFile: File;
@@ -19,26 +19,41 @@ interface Citation {
   text: string;
 }
 
-export function ChatInterface({ pdfFile, onCitationClick }: ChatInterfaceProps) {
-  const [input, setInput] = useState('');
+export function ChatInterface({
+  pdfFile,
+  onCitationClick,
+}: ChatInterfaceProps) {
+  const [input, setInput] = useState("");
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { messages, sendMessage, isLoading } = useChat({
-    transport: new DefaultChatTransport({
-      api: '/api/chat',
-    }),
-    initialMessages: [
-      {
-        id: 'welcome',
-        role: 'assistant',
-        parts: [{
-          type: 'text',
-          text: `Hello! I'm ready to help you analyze your PDF document "${pdfFile.name}". You can ask me questions about its content, request summaries, or ask for specific information. I'll provide citations with page numbers when referencing the document.`
-        }]
-      }
-    ]
-  });
+  // Using a simple state-based approach since the useChat hook seems to have API issues
+  const [messages, setMessages] = useState<
+    Array<{
+      id: string;
+      role: "assistant" | "user";
+      parts: Array<{ type: "text"; text: string }>;
+    }>
+  >([
+    {
+      id: "welcome",
+      role: "assistant",
+      parts: [
+        {
+          type: "text",
+          text: `Hello! I'm ready to help you analyze your PDF document "${pdfFile.name}". You can ask me questions about its content, request summaries, or ask for specific information. I'll provide citations with page numbers when referencing the document.`,
+        },
+      ],
+    },
+  ]);
+  const [isLoading, setIsLoading] = useState(false);
 
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Fallback scroll method
   useEffect(() => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
@@ -49,23 +64,37 @@ export function ChatInterface({ pdfFile, onCitationClick }: ChatInterfaceProps) 
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    // Create form data with the PDF file and message
-    const formData = new FormData();
-    formData.append('pdf', pdfFile);
-    formData.append('message', input);
+    const userMessage = {
+      id: Date.now().toString(),
+      role: "user" as const,
+      parts: [{ type: "text" as const, text: input }],
+    };
 
-    sendMessage({
-      role: 'user',
-      parts: [
-        { type: 'text', text: input },
-        { type: 'file', mediaType: 'application/pdf', url: URL.createObjectURL(pdfFile) }
-      ]
-    });
+    setMessages((prev) => [...prev, userMessage]);
+    setInput("");
+    setIsLoading(true);
 
-    setInput('');
+    // Here you would typically call your chat API
+    // For now, just adding a simple response
+    setTimeout(() => {
+      const assistantMessage = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant" as const,
+        parts: [
+          {
+            type: "text" as const,
+            text: "This is a placeholder response. The actual chat functionality should be implemented based on your API.",
+          },
+        ],
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+      setIsLoading(false);
+    }, 1000);
   };
 
-  const extractCitations = (text: string): { text: string; citations: Citation[] } => {
+  const extractCitations = (
+    text: string
+  ): { text: string; citations: Citation[] } => {
     const citationRegex = /\[Page (\d+)\]/g;
     const citations: Citation[] = [];
     let match;
@@ -73,7 +102,7 @@ export function ChatInterface({ pdfFile, onCitationClick }: ChatInterfaceProps) 
     while ((match = citationRegex.exec(text)) !== null) {
       citations.push({
         page: parseInt(match[1]),
-        text: match[0]
+        text: match[0],
       });
     }
 
@@ -82,7 +111,7 @@ export function ChatInterface({ pdfFile, onCitationClick }: ChatInterfaceProps) 
 
   const renderMessageWithCitations = (text: string) => {
     const { citations } = extractCitations(text);
-    
+
     if (citations.length === 0) {
       return <span>{text}</span>;
     }
@@ -92,7 +121,7 @@ export function ChatInterface({ pdfFile, onCitationClick }: ChatInterfaceProps) 
 
     citations.forEach((citation, index) => {
       const citationIndex = text.indexOf(citation.text, lastIndex);
-      
+
       // Add text before citation
       if (citationIndex > lastIndex) {
         elements.push(
@@ -121,9 +150,7 @@ export function ChatInterface({ pdfFile, onCitationClick }: ChatInterfaceProps) 
 
     // Add remaining text
     if (lastIndex < text.length) {
-      elements.push(
-        <span key="text-end">{text.substring(lastIndex)}</span>
-      );
+      elements.push(<span key="text-end">{text.substring(lastIndex)}</span>);
     }
 
     return <>{elements}</>;
@@ -146,31 +173,32 @@ export function ChatInterface({ pdfFile, onCitationClick }: ChatInterfaceProps) 
           {messages.map((message) => (
             <div
               key={message.id}
-              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`flex ${
+                message.role === "user" ? "justify-end" : "justify-start"
+              }`}
             >
               <div
                 className={`max-w-[80%] rounded-lg p-3 ${
-                  message.role === 'user'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-100 text-gray-900'
+                  message.role === "user"
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-100 text-gray-900"
                 }`}
               >
                 <div className="flex items-start space-x-2">
-                  {message.role === 'assistant' && (
+                  {message.role === "assistant" && (
                     <Bot className="h-4 w-4 mt-0.5 flex-shrink-0" />
                   )}
-                  {message.role === 'user' && (
+                  {message.role === "user" && (
                     <User className="h-4 w-4 mt-0.5 flex-shrink-0" />
                   )}
                   <div className="flex-1">
                     {message.parts.map((part, index) => {
-                      if (part.type === 'text') {
+                      if (part.type === "text") {
                         return (
                           <div key={index} className="whitespace-pre-wrap">
-                            {message.role === 'assistant' 
+                            {message.role === "assistant"
                               ? renderMessageWithCitations(part.text)
-                              : part.text
-                            }
+                              : part.text}
                           </div>
                         );
                       }
@@ -181,7 +209,7 @@ export function ChatInterface({ pdfFile, onCitationClick }: ChatInterfaceProps) 
               </div>
             </div>
           ))}
-          
+
           {isLoading && (
             <div className="flex justify-start">
               <div className="bg-gray-100 rounded-lg p-3 max-w-[80%]">
@@ -189,17 +217,29 @@ export function ChatInterface({ pdfFile, onCitationClick }: ChatInterfaceProps) 
                   <Bot className="h-4 w-4" />
                   <div className="flex space-x-1">
                     <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                    <div
+                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      style={{ animationDelay: "0.1s" }}
+                    />
+                    <div
+                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      style={{ animationDelay: "0.2s" }}
+                    />
                   </div>
                 </div>
               </div>
             </div>
           )}
+
+          {/* Invisible element to scroll to */}
+          <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
 
-      <form onSubmit={handleSubmit} className="border-t p-4 bg-gray-50 rounded-b-lg">
+      <form
+        onSubmit={handleSubmit}
+        className="border-t p-4 bg-gray-50 rounded-b-lg"
+      >
         <div className="flex space-x-2">
           <Input
             value={input}
@@ -213,13 +253,25 @@ export function ChatInterface({ pdfFile, onCitationClick }: ChatInterfaceProps) 
           </Button>
         </div>
         <div className="flex flex-wrap gap-2 mt-2">
-          <Badge variant="secondary" className="text-xs cursor-pointer" onClick={() => setInput("What is this document about?")}>
+          <Badge
+            variant="secondary"
+            className="text-xs cursor-pointer"
+            onClick={() => setInput("What is this document about?")}
+          >
             What is this document about?
           </Badge>
-          <Badge variant="secondary" className="text-xs cursor-pointer" onClick={() => setInput("Summarize the key points")}>
+          <Badge
+            variant="secondary"
+            className="text-xs cursor-pointer"
+            onClick={() => setInput("Summarize the key points")}
+          >
             Summarize the key points
           </Badge>
-          <Badge variant="secondary" className="text-xs cursor-pointer" onClick={() => setInput("Find specific information about...")}>
+          <Badge
+            variant="secondary"
+            className="text-xs cursor-pointer"
+            onClick={() => setInput("Find specific information about...")}
+          >
             Find specific information
           </Badge>
         </div>

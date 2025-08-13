@@ -48,6 +48,7 @@ export default function PDFChatApp() {
   const [contents, setContents] = useState<Contents[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfViewerRef = useRef<HTMLIFrameElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   async function chatLoop(chats: Contents[]) {
     console.log("Contents prepared for AI:", chats);
@@ -115,6 +116,11 @@ export default function PDFChatApp() {
       setIsCalled(false);
     }
   }, [isCalled]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   useEffect(() => {
     (async () => {
@@ -522,6 +528,9 @@ export default function PDFChatApp() {
                       </div>
                     </div>
                   )}
+
+                  {/* Invisible element to scroll to */}
+                  <div ref={messagesEndRef} />
                 </div>
               </ScrollArea>
 
