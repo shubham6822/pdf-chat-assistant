@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { SYSTEM_PROMPT } from "@/lib/prompt";
-import { useDropzone } from 'react-dropzone';
+import { useDropzone } from "react-dropzone";
 
 interface Citation {
   page: number;
@@ -27,9 +27,14 @@ interface Citation {
 
 interface ChatMessage {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "model";
   content: string;
   timestamp: Date;
+}
+
+interface Contents {
+  role: "user" | "model";
+  parts: {}[];
 }
 
 export default function PDFChatApp() {
@@ -39,6 +44,8 @@ export default function PDFChatApp() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isCalled, setIsCalled] = useState(false);
+  const [contents, setContents] = useState<Contents[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfViewerRef = useRef<HTMLIFrameElement>(null);
 
@@ -46,51 +53,83 @@ export default function PDFChatApp() {
     apiKey: process.env.NEXT_PUBLIC_GOOGLE_GENERATIVE_AI_API_KEY!,
   });
 
-  // Mock AI responses with citations
-  const mockResponses = [
-    "Based on the document, this appears to be a comprehensive report covering multiple topics. The main sections are outlined in [Page 1] and detailed throughout the document. Key findings can be found on [Page 3] and [Page 7].",
-    "The document discusses several important concepts. The introduction on [Page 1] provides context, while the methodology is explained in detail on [Page 4]. Results are presented starting from [Page 8].",
-    "According to the content, the main conclusions are summarized on [Page 12]. The recommendations section on [Page 15] provides actionable insights based on the analysis.",
-    "The document contains detailed information about the subject matter. Key statistics are presented in [Page 6], and comparative analysis can be found on [Page 9] and [Page 11].",
-    "This appears to be a well-structured document with clear sections. The executive summary on [Page 2] provides an overview, while detailed explanations begin on [Page 5].",
-  ];
-
-  const handleFileUpload = async (file: File) => {
-    console.log("fetching", file?.arrayBuffer());
-    if (file && file.type === "application/pdf") {
-      setPdfFile(file);
-      const url = URL.createObjectURL(file);
-      setPdfUrl(url);
-      const formData = new FormData();
-      formData.set("pdf", file);
-      console.log("fetching data", formData);
-      const pdfBuffer = await file.arrayBuffer();
-      const contents = [
-        { text: "Summarize this document in 50 words" },
-        {
-          inlineData: {
-            mimeType: "application/pdf",
-            data: Buffer.from(pdfBuffer).toString("base64"),
-          },
-        },
-      ];
-
+  async function chatLoop(chats: Contents[]) {
+    console.log("Contents prepared for AI:", chats);
+    try {
+      setIsLoading(true);
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: contents,
+        contents: chats,
         config: {
           systemInstruction: SYSTEM_PROMPT,
         },
       });
-      console.log("test", response.text);
-      // Add welcome message when PDF is uploaded
-      const welcomeMessage: ChatMessage = {
-        id: Date.now().toString(),
-        role: "assistant",
-        content: response.text ?? "",
-        timestamp: new Date(),
-      };
-      setMessages([welcomeMessage]);
+      setIsLoading(false);
+      if (response) {
+        const newMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: "model",
+          content: response.text ?? "",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, newMessage]);
+        setContents((prev) => [
+          ...prev,
+          {
+            role: "model",
+            parts: [
+              {
+                text: response.text ?? "",
+              },
+            ],
+          },
+        ]);
+      }
+    } catch (error) {
+      console.error("Error in chat loop:", error);
+      setIsLoading(false);
+      return;
+    }
+  }
+
+  useEffect(() => {
+    if (isCalled) {
+      chatLoop(contents).catch((error) => {
+        console.error("Error in chat loop:", error);
+      });
+      setIsCalled(false);
+    }
+  }, [isCalled]);
+
+  useEffect(() => {
+    (async () => {
+      if (pdfFile) {
+        const pdfBuffer = await pdfFile.arrayBuffer();
+        const request = [
+          {
+            role: "user",
+            parts: [
+              { text: "Summarize this document in 50 words" },
+              {
+                inlineData: {
+                  mimeType: "application/pdf",
+                  data: Buffer.from(pdfBuffer).toString("base64"),
+                },
+              },
+            ],
+          },
+        ];
+        setContents(request);
+        chatLoop(request);
+      }
+    })();
+  }, [pdfFile]);
+
+  const handleFileUpload = async (file: File) => {
+    if (file && file.type === "application/pdf") {
+      setPdfFile(file);
+      const url = URL.createObjectURL(file);
+      setPdfUrl(url);
     }
   };
 
@@ -104,10 +143,10 @@ export default function PDFChatApp() {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      'application/pdf': ['.pdf']
+      "application/pdf": [".pdf"],
     },
     multiple: false,
-    noClick: true
+    noClick: true,
   });
 
   const navigateToPage = (page: number) => {
@@ -201,23 +240,18 @@ export default function PDFChatApp() {
 
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
-    setIsLoading(true);
-
-    // Simulate AI response delay
-    setTimeout(() => {
-      const randomResponse =
-        mockResponses[Math.floor(Math.random() * mockResponses.length)];
-
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: randomResponse,
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-      setIsLoading(false);
-    }, 1000 + Math.random() * 2000); // Random delay between 1-3 seconds
+    setContents((prev) => [
+      ...prev,
+      {
+        role: "user",
+        parts: [
+          {
+            text: input,
+          },
+        ],
+      },
+    ]);
+    setIsCalled(true);
   };
 
   const handleQuickQuestion = (question: string) => {
@@ -257,7 +291,9 @@ export default function PDFChatApp() {
                 <div
                   {...getRootProps()}
                   className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-8 hover:cursor-pointer transition-colors ${
-                    isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
+                    isDragActive
+                      ? "border-blue-500 bg-blue-50"
+                      : "border-gray-300 hover:border-gray-400"
                   }`}
                   onClick={() => fileInputRef.current?.click()}
                 >
@@ -265,14 +301,20 @@ export default function PDFChatApp() {
                   <Upload className="h-12 w-12 text-gray-400 mb-4" />
                   <p className="text-gray-600 mb-4 text-center">
                     {isDragActive
-                      ? 'Drop the PDF file here...'
-                      : 'Upload a PDF file to get started'}
+                      ? "Drop the PDF file here..."
+                      : "Upload a PDF file to get started"}
                   </p>
-                  <Button variant="secondary" className="mb-4" onClick={() => fileInputRef.current?.click()}>Choose PDF File</Button>
+                  <Button
+                    variant="secondary"
+                    className="mb-4"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    Choose PDF File
+                  </Button>
                   <p className="text-xs text-gray-500 text-center">
                     {isDragActive
-                      ? 'Release to upload'
-                      : 'Drag and drop a PDF file here, or click to select'}
+                      ? "Release to upload"
+                      : "Drag and drop a PDF file here, or click to select"}
                   </p>
                   <input
                     ref={fileInputRef}
@@ -351,9 +393,9 @@ export default function PDFChatApp() {
               </CardTitle>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col">
-              <ScrollArea className="flex-1 mb-4 p-4 border rounded-lg bg-white">
-                <div className="space-y-4">
-                  {messages.length === 0 && (
+              <ScrollArea className="flex-1 mb-4 p-4 border rounded-lg bg-white max-h-[calc(100vh-400px)] overflow-y-auto">
+                <div className="space-y-4 min-h-full">
+                  {messages.length === 0 && !isLoading && (
                     <div className="text-center text-gray-500 py-8">
                       {pdfFile
                         ? "Ask me anything about your PDF document!"
@@ -378,14 +420,14 @@ export default function PDFChatApp() {
                         }`}
                       >
                         <div className="flex items-start gap-2">
-                          {message.role === "assistant" && (
+                          {message.role === "model" && (
                             <Bot className="h-4 w-4 mt-0.5 flex-shrink-0" />
                           )}
                           {message.role === "user" && (
                             <User className="h-4 w-4 mt-0.5 flex-shrink-0" />
                           )}
                           <div className="flex-1">
-                            {message.role === "assistant" ? (
+                            {message.role === "model" ? (
                               renderMessageWithCitations(message.content)
                             ) : (
                               <div className="whitespace-pre-wrap">
