@@ -41,6 +41,7 @@ export default function PDFChatApp() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -105,9 +106,9 @@ export default function PDFChatApp() {
     (async () => {
       if (pdfFile) {
         const pdfBuffer = await pdfFile.arrayBuffer();
-        const request = [
+        const request: Contents[] = [
           {
-            role: "user",
+            role: "user" as const,
             parts: [
               { text: "Summarize this document in 50 words" },
               {
@@ -130,6 +131,15 @@ export default function PDFChatApp() {
       setPdfFile(file);
       const url = URL.createObjectURL(file);
       setPdfUrl(url);
+      setCurrentPage(1);
+      setTotalPages(0); // Reset total pages
+    }
+  };
+
+  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      await handleFileUpload(file);
     }
   };
 
@@ -150,9 +160,22 @@ export default function PDFChatApp() {
   });
 
   const navigateToPage = (page: number) => {
+    if (page < 1) return;
     setCurrentPage(page);
     if (pdfViewerRef.current && pdfUrl) {
-      pdfViewerRef.current.src = `${pdfUrl}#page=${page}&toolbar=1&navpanes=0&scrollbar=1`;
+      // Force reload the iframe with new page
+      const newSrc = `${pdfUrl}#page=${page}&toolbar=1&navpanes=0&scrollbar=1&view=FitH`;
+      pdfViewerRef.current.src = newSrc;
+      
+      // Alternative method to ensure page change
+      setTimeout(() => {
+        if (pdfViewerRef.current) {
+          pdfViewerRef.current.contentWindow?.postMessage({
+            type: 'setPage',
+            page: page
+          }, '*');
+        }
+      }, 100);
     }
   };
 
@@ -164,6 +187,13 @@ export default function PDFChatApp() {
 
   const goToNextPage = () => {
     navigateToPage(currentPage + 1);
+  };
+
+  const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const pageNum = parseInt(e.target.value);
+    if (!isNaN(pageNum) && pageNum > 0) {
+      navigateToPage(pageNum);
+    }
   };
 
   const extractCitations = (content: string): Citation[] => {
@@ -342,13 +372,25 @@ export default function PDFChatApp() {
                       >
                         <ChevronLeft className="h-4 w-4" />
                       </Button>
-                      <span className="text-sm text-gray-500 min-w-[80px] text-center">
-                        Page {currentPage}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          value={currentPage}
+                          onChange={handlePageInputChange}
+                          className="w-16 h-8 text-sm text-center"
+                          min="1"
+                        />
+                        {totalPages > 0 && (
+                          <span className="text-sm text-gray-500">
+                            of {totalPages}
+                          </span>
+                        )}
+                      </div>
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={goToNextPage}
+                        disabled={totalPages > 0 && currentPage >= totalPages}
                       >
                         <ChevronRight className="h-4 w-4" />
                       </Button>
@@ -364,7 +406,8 @@ export default function PDFChatApp() {
                   <div className="flex-1 border rounded-lg overflow-hidden bg-white">
                     <iframe
                       ref={pdfViewerRef}
-                      src={`${pdfUrl}#page=${currentPage}&toolbar=1&navpanes=0&scrollbar=1`}
+                      key={`${pdfUrl}-${currentPage}`}
+                      src={`${pdfUrl}#page=${currentPage}&toolbar=1&navpanes=0&scrollbar=1&view=FitH`}
                       className="w-full h-full"
                       title="PDF Viewer"
                     />
@@ -373,7 +416,7 @@ export default function PDFChatApp() {
                     ref={fileInputRef}
                     type="file"
                     accept=".pdf"
-                    onChange={handleFileUpload}
+                    onChange={handleFileInputChange}
                     className="hidden"
                   />
                 </div>
