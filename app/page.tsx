@@ -49,6 +49,8 @@ export default function PDFChatApp() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfViewerRef = useRef<HTMLIFrameElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
+  const [displayedText, setDisplayedText] = useState<string>("");
 
   async function chatLoop(chats: Contents[]) {
     console.log("Contents prepared for AI:", chats);
@@ -79,6 +81,8 @@ export default function PDFChatApp() {
             ],
           },
         ]);
+        // Start typing animation for the new message
+        setTypingMessageId(newMessage.id);
       } else {
         // Handle error from server action
         const errorMessage: ChatMessage = {
@@ -120,7 +124,32 @@ export default function PDFChatApp() {
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, displayedText]);
+
+  // Typewriter effect for assistant messages
+  useEffect(() => {
+    if (!typingMessageId) return;
+
+    const currentMessage = messages.find((msg) => msg.id === typingMessageId);
+    if (!currentMessage || currentMessage.role !== "model") return;
+
+    const fullText = currentMessage.content || "";
+    let currentIndex = 0;
+    setDisplayedText("");
+
+    const typeInterval = setInterval(() => {
+      if (currentIndex < fullText.length) {
+        setDisplayedText(fullText.slice(0, currentIndex + 1));
+        currentIndex++;
+      } else {
+        clearInterval(typeInterval);
+        setTypingMessageId(null);
+        setDisplayedText("");
+      }
+    }, 30); // Adjust speed here (lower = faster)
+
+    return () => clearInterval(typeInterval);
+  }, [typingMessageId, messages]);
 
   useEffect(() => {
     (async () => {
@@ -496,7 +525,15 @@ export default function PDFChatApp() {
                           )}
                           <div className="flex-1">
                             {message.role === "model" ? (
-                              renderMessageWithCitations(message.content)
+                              // Show typing animation for the current typing message
+                              message.id === typingMessageId ? (
+                                <div className="whitespace-pre-wrap">
+                                  <span>{displayedText}</span>
+                                  <span className="inline-block w-0.5 h-5 bg-gray-600 ml-0.5 animate-pulse" />
+                                </div>
+                              ) : (
+                                renderMessageWithCitations(message.content)
+                              )
                             ) : (
                               <div className="whitespace-pre-wrap">
                                 {message.content}

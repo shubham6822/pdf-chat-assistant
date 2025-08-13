@@ -47,18 +47,45 @@ export function ChatInterface({
     },
   ]);
   const [isLoading, setIsLoading] = useState(false);
+  const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
+  const [displayedText, setDisplayedText] = useState<string>("");
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, displayedText]);
 
   // Fallback scroll method
   useEffect(() => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, displayedText]);
+
+  // Typewriter effect for assistant messages
+  useEffect(() => {
+    if (!typingMessageId) return;
+
+    const currentMessage = messages.find((msg) => msg.id === typingMessageId);
+    if (!currentMessage || currentMessage.role !== "assistant") return;
+
+    const fullText = currentMessage.parts[0]?.text || "";
+    let currentIndex = 0;
+    setDisplayedText("");
+
+    const typeInterval = setInterval(() => {
+      if (currentIndex < fullText.length) {
+        setDisplayedText(fullText.slice(0, currentIndex + 1));
+        currentIndex++;
+      } else {
+        clearInterval(typeInterval);
+        setTypingMessageId(null);
+        setDisplayedText("");
+      }
+    }, 30); // Adjust speed here (lower = faster)
+
+    return () => clearInterval(typeInterval);
+  }, [typingMessageId, messages]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,12 +110,13 @@ export function ChatInterface({
         parts: [
           {
             type: "text" as const,
-            text: "This is a placeholder response. The actual chat functionality should be implemented based on your API.",
+            text: "This is a placeholder response with some longer text to demonstrate the typewriter effect. The actual chat functionality should be implemented based on your API. You can see how each character appears one by one, creating a smooth typing animation similar to ChatGPT.",
           },
         ],
       };
       setMessages((prev) => [...prev, assistantMessage]);
       setIsLoading(false);
+      setTypingMessageId(assistantMessage.id);
     }, 1000);
   };
 
@@ -194,6 +222,19 @@ export function ChatInterface({
                   <div className="flex-1">
                     {message.parts.map((part, index) => {
                       if (part.type === "text") {
+                        // Show typing animation for the current typing message
+                        if (
+                          message.role === "assistant" &&
+                          message.id === typingMessageId
+                        ) {
+                          return (
+                            <div key={index} className="whitespace-pre-wrap">
+                              <span>{displayedText}</span>
+                              <span className="inline-block w-0.5 h-5 bg-gray-600 ml-0.5 animate-pulse" />
+                            </div>
+                          );
+                        }
+                        // Show full text for completed messages or user messages
                         return (
                           <div key={index} className="whitespace-pre-wrap">
                             {message.role === "assistant"
