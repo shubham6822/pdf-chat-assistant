@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,8 @@ import {
   User,
 } from "lucide-react";
 import Image from "next/image";
+import { SYSTEM_PROMPT } from "@/lib/prompt";
+import { useDropzone } from 'react-dropzone';
 
 interface Citation {
   page: number;
@@ -53,10 +55,7 @@ export default function PDFChatApp() {
     "This appears to be a well-structured document with clear sections. The executive summary on [Page 2] provides an overview, while detailed explanations begin on [Page 5].",
   ];
 
-  const handleFileUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
+  const handleFileUpload = async (file: File) => {
     console.log("fetching", file?.arrayBuffer());
     if (file && file.type === "application/pdf") {
       setPdfFile(file);
@@ -65,9 +64,23 @@ export default function PDFChatApp() {
       const formData = new FormData();
       formData.set("pdf", file);
       console.log("fetching data", formData);
+      const pdfBuffer = await file.arrayBuffer();
+      const contents = [
+        { text: "Summarize this document in 50 words" },
+        {
+          inlineData: {
+            mimeType: "application/pdf",
+            data: Buffer.from(pdfBuffer).toString("base64"),
+          },
+        },
+      ];
+
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: "How does AI work?",
+        contents: contents,
+        config: {
+          systemInstruction: SYSTEM_PROMPT,
+        },
       });
       console.log("test", response.text);
       // Add welcome message when PDF is uploaded
@@ -80,6 +93,22 @@ export default function PDFChatApp() {
       setMessages([welcomeMessage]);
     }
   };
+
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    const file = acceptedFiles[0];
+    if (file) {
+      await handleFileUpload(file);
+    }
+  }, []);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'application/pdf': ['.pdf']
+    },
+    multiple: false,
+    noClick: true
+  });
 
   const navigateToPage = (page: number) => {
     setCurrentPage(page);
@@ -226,22 +255,33 @@ export default function PDFChatApp() {
             <CardContent className="flex-1 flex flex-col">
               {!pdfFile ? (
                 <div
-                  className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-8 hover:cursor-pointer"
+                  {...getRootProps()}
+                  className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-8 hover:cursor-pointer transition-colors ${
+                    isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
+                  }`}
                   onClick={() => fileInputRef.current?.click()}
                 >
+                  <input {...getInputProps()} />
                   <Upload className="h-12 w-12 text-gray-400 mb-4" />
                   <p className="text-gray-600 mb-4 text-center">
-                    Upload a PDF file to get started
+                    {isDragActive
+                      ? 'Drop the PDF file here...'
+                      : 'Upload a PDF file to get started'}
                   </p>
-                  <Button className="mb-4">Choose PDF File</Button>
+                  <Button variant="secondary" className="mb-4" onClick={() => fileInputRef.current?.click()}>Choose PDF File</Button>
                   <p className="text-xs text-gray-500 text-center">
-                    summaries, asks questions, and more!
+                    {isDragActive
+                      ? 'Release to upload'
+                      : 'Drag and drop a PDF file here, or click to select'}
                   </p>
                   <input
                     ref={fileInputRef}
                     type="file"
                     accept=".pdf"
-                    onChange={handleFileUpload}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileUpload(file);
+                    }}
                     className="hidden"
                   />
                 </div>
@@ -304,7 +344,7 @@ export default function PDFChatApp() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <MessageCircle className="h-5 w-5" />
-                Chat Assistant
+                PDF Assistant
                 <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full ml-auto">
                   Chat Mode
                 </span>
