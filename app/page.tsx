@@ -59,7 +59,7 @@ export default function PDFChatApp() {
     try {
       setIsLoading(true);
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-2.0-flash",
         contents: chats,
         config: {
           systemInstruction: SYSTEM_PROMPT,
@@ -136,7 +136,9 @@ export default function PDFChatApp() {
     }
   };
 
-  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileInputChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = e.target.files?.[0];
     if (file) {
       await handleFileUpload(file);
@@ -166,14 +168,17 @@ export default function PDFChatApp() {
       // Force reload the iframe with new page
       const newSrc = `${pdfUrl}#page=${page}&toolbar=1&navpanes=0&scrollbar=1&view=FitH`;
       pdfViewerRef.current.src = newSrc;
-      
+
       // Alternative method to ensure page change
       setTimeout(() => {
         if (pdfViewerRef.current) {
-          pdfViewerRef.current.contentWindow?.postMessage({
-            type: 'setPage',
-            page: page
-          }, '*');
+          pdfViewerRef.current.contentWindow?.postMessage(
+            {
+              type: "setPage",
+              page: page,
+            },
+            "*"
+          );
         }
       }, 100);
     }
