@@ -52,6 +52,7 @@ export default function PDFChatApp() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
   const [displayedText, setDisplayedText] = useState<string>("");
+  const [isUploadingPdf, setIsUploadingPdf] = useState(false);
 
   async function chatLoop(chats: Contents[]) {
     console.log("Contents prepared for AI:", chats);
@@ -155,34 +156,65 @@ export default function PDFChatApp() {
   useEffect(() => {
     (async () => {
       if (pdfFile) {
-        const file1 = await generateFileContent(pdfFile);
-        let fileContent;
-        if (file1.uri && file1.mimeType) {
-          fileContent = createPartFromUri(file1.uri, file1.mimeType);
-        }
-        const pdfBuffer = await pdfFile.arrayBuffer();
-        const request: Contents[] = [
-          {
-            role: "user" as const,
-            parts: [
-              {
-                fileData: {
-                  fileUri: file1.uri, // From upload result
-                  mimeType: file1.mimeType, // e.g. "application/pdf"
+        setIsUploadingPdf(true);
+        try {
+          const file1 = await generateFileContent(pdfFile);
+          let fileContent;
+          if (file1.uri && file1.mimeType) {
+            fileContent = createPartFromUri(file1.uri, file1.mimeType);
+          }
+          const pdfBuffer = await pdfFile.arrayBuffer();
+          const request: Contents[] = [
+            {
+              role: "user" as const,
+              parts: [
+                {
+                  fileData: {
+                    fileUri: file1.uri, // From upload result
+                    mimeType: file1.mimeType, // e.g. "application/pdf"
+                  },
                 },
-              },
-              { text: `Summarize this document in 50 words ` },
-            ],
-          },
-        ];
-        setContents(request);
-        chatLoop(request);
+                { text: `Summarize this document in 50 words ` },
+              ],
+            },
+          ];
+          setContents(request);
+          chatLoop(request);
+        } catch (error) {
+          console.error("Error processing PDF:", error);
+          // Show error message to user
+          const errorMessage: ChatMessage = {
+            id: Date.now().toString(),
+            role: "model",
+            content:
+              "Sorry, I encountered an error processing your PDF. Please try again with a different file.",
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, errorMessage]);
+        } finally {
+          setIsUploadingPdf(false);
+        }
       }
     })();
   }, [pdfFile]);
 
   const handleFileUpload = async (file: File) => {
     if (file && file.type === "application/pdf") {
+      // Check file size (10MB limit)
+      const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+      if (file.size > maxSize) {
+        // Show error message to user
+        const errorMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: "model",
+          content:
+            "Sorry, the PDF file is too large. Please upload a file smaller than 10MB.",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+        return;
+      }
+
       setPdfFile(file);
       const url = URL.createObjectURL(file);
       setPdfUrl(url);
@@ -401,6 +433,9 @@ export default function PDFChatApp() {
                   >
                     Choose PDF File
                   </Button>
+                  <p className="text-xs text-gray-500 text-center mb-2">
+                    Maximum file size: 10MB
+                  </p>
                   <p className="text-xs text-gray-500 text-center">
                     {isDragActive
                       ? "Release to upload"
@@ -498,11 +533,27 @@ export default function PDFChatApp() {
             <CardContent className="flex-1 flex flex-col">
               <ScrollArea className="flex-1 mb-4 p-4 border rounded-lg bg-white max-h-[calc(100vh-400px)] overflow-y-auto">
                 <div className="space-y-4 min-h-full">
-                  {messages.length === 0 && !isLoading && (
+                  {messages.length === 0 && !isLoading && !isUploadingPdf && (
                     <div className="text-center text-gray-500 py-8">
                       {pdfFile
                         ? "Ask me anything about your PDF document!"
                         : "Upload a PDF file to start chatting about its contents"}
+                    </div>
+                  )}
+
+                  {isUploadingPdf && (
+                    <div className="flex justify-center items-center py-8">
+                      <div className="text-center">
+                        <div className="flex justify-center mb-4">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                        </div>
+                        <p className="text-gray-600">
+                          Uploading and processing PDF...
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          This may take a few moments
+                        </p>
+                      </div>
                     </div>
                   )}
 
@@ -582,23 +633,27 @@ export default function PDFChatApp() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder={
-                    pdfFile
+                    isUploadingPdf
+                      ? "Processing PDF..."
+                      : pdfFile
                       ? "Ask about your PDF..."
                       : "Upload a PDF first to start chatting"
                   }
-                  disabled={!pdfFile || isLoading}
+                  disabled={!pdfFile || isLoading || isUploadingPdf}
                   className="flex-1"
                 />
                 <Button
                   type="submit"
-                  disabled={!pdfFile || !input.trim() || isLoading}
+                  disabled={
+                    !pdfFile || !input.trim() || isLoading || isUploadingPdf
+                  }
                   size="icon"
                 >
                   <Send className="h-4 w-4" />
                 </Button>
               </form>
 
-              {pdfFile && (
+              {pdfFile && !isUploadingPdf && (
                 <div className="flex flex-wrap gap-2 mt-2">
                   <Button
                     variant="outline"
